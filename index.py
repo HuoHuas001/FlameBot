@@ -71,8 +71,12 @@ async def sendGameMsg(api: BotAPI, message: GroupMessage, params=None):
 
 @Commands("执行命令")
 async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
-    await server_instance.broadcast({"type":"cmd","cmd":params},message.group_openid)
-    await message.reply(content="已发送命令。")
+    unique_id = uuid.uuid4()
+    await server_instance.broadcast({"type":"cmd","cmd":params,"uuid":str(unique_id)},message.group_openid)
+    async def cmdReply(msg):
+        ret = await message.reply(content=msg)
+        _log.info(ret)
+    server_instance.addCallback(str(unique_id),cmdReply)
     return True
 
 @Commands("查白名单")

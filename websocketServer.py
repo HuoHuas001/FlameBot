@@ -29,19 +29,23 @@ class WebSocketServer:
         self.active_connections.remove(websocket)
         self.logger.info(f"[Websocket] Active connections: {len(self.active_connections)}")
         for i in self.registedServer:
-            if(self.registedServer[i] == websocket):
+            if(self.registedServer[i]["client"] == websocket):
                 self.logger.info(f"[Websocket] Client Disconnect: {i}")
+                for groupId in self.registedServer[i]["group"]:
+                    await self.sendGroupMsg(groupId,f"{i} 已断开与FlameHuo的连接,请管理员检查是否存在问题")
                 break
         
+    #获取botApi
     def botAPI(self,api):
         self.botApi = api
 
+    #添加Callback事件
     def addCallback(self,id,cbfunc):
         self.callback[id] = cbfunc
 
     #发送Bot消息
     async def sendGroupMsg(self,group,msg):
-        await self.botApi.post_group_message(group,0,msg,msg_seq=1000)
+        return await self.botApi.post_group_message(group,0,msg,msg_seq=1000)
 
     async def process_message(self, client, message):
         try:
@@ -49,22 +53,37 @@ class WebSocketServer:
             if not self.validate_data(data):
                 await client.send(json.dumps({"type":"error","error": "Invalid data"},ensure_ascii=False))
                 return
-
+            self.logger.info(data)
             # 处理消息
             response = {"type": "success"}
-            
             if(data["type"] == "sendMsg"):
                 await self.sendGroupMsg(data["group"],data["msg"])
                 await client.send(json.dumps(response,ensure_ascii=False))
             elif(data["type"] == "heart"):
                 await client.send(data)
             elif(data["type"] == "success"):
-                pass
+                if(data["uuid"] != ""):
+                    await self.callback[data["uuid"]]("执行成功:\n"+data["msg"])
+                    del self.callback[data["uuid"]]
+                else:
+                    await self.sendGroupMsg(data["group"],"执行成功:\n"+data["msg"])
             elif(data["type"] == "error"):
-                pass
+                if(data["uuid"] != ""):
+                    await self.callback[data["uuid"]]("执行失败:\n"+data["msg"])
+                    del self.callback[data["uuid"]]
+                else:
+                    await self.sendGroupMsg(data["group"],"执行失败:\n"+data["msg"])
+                
             elif(data["type"] == "shakeHand"):
-                self.registedServer[data["name"]] = client
-                await client.send(json.dumps({"type":"shaked","Code":1,"Msg":""},ensure_ascii=False))
+                self.registedServer[data["name"]] = {"client":client,"group":data["group"]}
+                for groupId in data["group"]:
+                    await self.sendGroupMsg(groupId,f'{data["name"]} 已连接FlameHuo')
+                await client.send(
+                    json.dumps(
+                        {"type":"shaked","Code":1,"Msg":""}
+                        ,ensure_ascii=False
+                        )
+                    )
             elif(data["type"] == "queryWl"):
                 if data["uuid"] in self.callback:
                     await self.callback[data["uuid"]](data["list"])
