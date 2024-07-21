@@ -1,0 +1,5 @@
+config.py
+.vscode
+botpy.log
+nickName.json
+websocket.py

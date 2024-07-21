@@ -1,0 +1,68 @@
+# -*- coding: utf-8 -*-
+import os
+
+import botpy
+from botpy import logging, BotAPI
+
+from botpy.ext.command_util import Commands
+from botpy.message import GroupMessage
+from botpy.ext.cog_yaml import read
+_log = logging.get_logger()
+
+APPID = "102147135"
+TOKEN = "gM2iO4lS9qXEvcK2kSAsaI1kTCveN7rb"
+
+@Commands("添加白名单")
+async def addAllowList(api: BotAPI, message: GroupMessage, params=None):
+    _log.info(params)
+    await message.reply(content=f"已添加白名单")
+    return True
+
+@Commands("撤销")
+async def reCall(api: BotAPI, message: GroupMessage, params=None):
+    _log.info(params)
+    await message.reply(content=f"已撤销白名单")
+    return True
+
+@Commands("帮助")
+async def help(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content='FlameHuo帮助:\n/添加白名单\n/撤销')
+    return True
+
+@Commands("查群号")
+async def queryGroup(api: BotAPI, message: GroupMessage, params=None):
+    groupId = "114514"
+    await message.reply(content=f"本群群号:{groupId}")
+    return True
+
+@Commands("设置名称")
+async def setGroupName(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content=f"已设置")
+    return True
+
+@Commands("发信息")
+async def sendGameMsg(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content="你好呀，我是FlameHuo")
+    return True
+
+class MyClient(botpy.Client):
+    async def on_group_at_message_create(self, message):
+        # 注册指令handler
+        handlers = [
+            addAllowList,
+            help,
+            reCall,
+            queryGroup,
+            setGroupName,
+            sendGameMsg,
+        ]
+        for handler in handlers:
+            if await handler(api=self.api, message=message):
+                return
+
+#订阅事件
+intents = botpy.Intents.none()
+intents.public_messages=True
+
+client = MyClient(intents=intents)
+client.run(appid=APPID, secret=TOKEN)
