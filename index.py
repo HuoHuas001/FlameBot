@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
-import os
-
 import botpy
 from botpy import logging, BotAPI
-
 from botpy.ext.command_util import Commands
 from botpy.message import GroupMessage
-from botpy.ext.cog_yaml import read
 import re
 import asyncio
 import websockets
