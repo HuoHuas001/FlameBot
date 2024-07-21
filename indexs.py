@@ -7,10 +7,9 @@ from botpy import logging, BotAPI
 from botpy.ext.command_util import Commands
 from botpy.message import GroupMessage
 from botpy.ext.cog_yaml import read
+from config import *
 _log = logging.get_logger()
 
-APPID = "102147135"
-TOKEN = "gM2iO4lS9qXEvcK2kSAsaI1kTCveN7rb"
 
 @Commands("添加白名单")
 async def addAllowList(api: BotAPI, message: GroupMessage, params=None):
@@ -45,6 +44,11 @@ async def sendGameMsg(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content="你好呀，我是FlameHuo")
     return True
 
+@Commands("查白名单")
+async def queryWl(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content="现在还没有白名单")
+    return True
+
 class MyClient(botpy.Client):
     async def on_group_at_message_create(self, message):
         # 注册指令handler
@@ -55,6 +59,7 @@ class MyClient(botpy.Client):
             queryGroup,
             setGroupName,
             sendGameMsg,
+            queryWl
         ]
         for handler in handlers:
             if await handler(api=self.api, message=message):
@@ -65,4 +70,4 @@ intents = botpy.Intents.none()
 intents.public_messages=True
 
 client = MyClient(intents=intents)
-client.run(appid=APPID, secret=TOKEN)
+client.run(appid=APPID, secret=SECRET)
