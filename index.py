@@ -2,7 +2,7 @@
 import botpy
 from botpy import logging, BotAPI
 from botpy.ext.command_util import Commands
-from botpy.message import GroupMessage
+from botpy.message import GroupMessage,MessageAudit
 import asyncio
 import websockets
 import uuid
@@ -75,8 +75,9 @@ async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
     await server_instance.broadcast({"type":"cmd","cmd":params,"uuid":str(unique_id)},message.group_openid)
     async def cmdReply(msg):
         ret = await message.reply(content=msg)
-        _log.info(ret)
+        #_log.info(ret)
     server_instance.addCallback(str(unique_id),cmdReply)
+    #await message.reply(content="已向服务器发送命令，请等待执行.")
     return True
 
 @Commands("查白名单")
@@ -109,11 +110,14 @@ class BotClient(botpy.Client):
         for handler in handlers:
             if await handler(api=self.api, message=message):
                 return
+    async def on_message_audit_reject(self, message: MessageAudit):
+        _log.warning(f"消息：{message.message_id} 审核未通过.")
     
 # 开启BotPy客户端
 async def startClient():
     intents = botpy.Intents.none()
     intents.public_messages=True
+    intents.message_audit=True
     client = BotClient(intents=intents)
     client.postApi()
     await client.start(appid=APPID, secret=SECRET)

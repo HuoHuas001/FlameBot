@@ -1,5 +1,6 @@
 import json
 import websockets
+from botpy import errors
 
 # 定义WebSocket服务器类
 class WebSocketServer:
@@ -44,8 +45,16 @@ class WebSocketServer:
         self.callback[id] = cbfunc
 
     #发送Bot消息
-    async def sendGroupMsg(self,group,msg):
-        return await self.botApi.post_group_message(group,0,msg,msg_seq=1000)
+    async def sendGroupMsg(self,group,msg,client = None):
+        try:
+            return await self.botApi.post_group_message(group,0,msg,msg_seq=1000)
+        except errors.ServerError:
+            self.logger.error(f"{group} 不存在!")
+            if(client != None):
+                await client.send(json.dumps({"type":"shutdown","msg":f"{group} 不存在!"},ensure_ascii=False))
+                await client.close(1003,"Client Error.")
+            return None
+        
 
     async def process_message(self, client, message):
         try:
@@ -53,11 +62,10 @@ class WebSocketServer:
             if not self.validate_data(data):
                 await client.send(json.dumps({"type":"error","error": "Invalid data"},ensure_ascii=False))
                 return
-            self.logger.info(data)
             # 处理消息
             response = {"type": "success"}
             if(data["type"] == "sendMsg"):
-                await self.sendGroupMsg(data["group"],data["msg"])
+                await self.sendGroupMsg(data["group"],data["msg"],client)
                 await client.send(json.dumps(response,ensure_ascii=False))
             elif(data["type"] == "heart"):
                 await client.send(data)
@@ -66,18 +74,18 @@ class WebSocketServer:
                     await self.callback[data["uuid"]]("执行成功:\n"+data["msg"])
                     del self.callback[data["uuid"]]
                 else:
-                    await self.sendGroupMsg(data["group"],"执行成功:\n"+data["msg"])
+                    await self.sendGroupMsg(data["group"],"执行成功:\n"+data["msg"],client)
             elif(data["type"] == "error"):
                 if(data["uuid"] != ""):
                     await self.callback[data["uuid"]]("执行失败:\n"+data["msg"])
                     del self.callback[data["uuid"]]
                 else:
-                    await self.sendGroupMsg(data["group"],"执行失败:\n"+data["msg"])
+                    await self.sendGroupMsg(data["group"],"执行失败:\n"+data["msg"],client)
                 
             elif(data["type"] == "shakeHand"):
                 self.registedServer[data["name"]] = {"client":client,"group":data["group"]}
                 for groupId in data["group"]:
-                    await self.sendGroupMsg(groupId,f'{data["name"]} 已连接FlameHuo')
+                    await self.sendGroupMsg(groupId,f'{data["name"]} 已连接FlameHuo',client)
                 await client.send(
                     json.dumps(
                         {"type":"shaked","Code":1,"Msg":""}
@@ -103,8 +111,7 @@ class WebSocketServer:
             except websockets.exceptions.ConnectionClosed as e:
                 self.logger.error(f"Connection closed error: {e}")
                 self.active_connections.remove(connection)
-            
-
+                
     def validate_data(self, data):
         # 这里可以添加具体的数据验证逻辑
         return "type" in data and isinstance(data["type"], str)
