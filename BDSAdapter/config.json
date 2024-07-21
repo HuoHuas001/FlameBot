@@ -1,6 +1,8 @@
 {
     "wsUrl":"ws://127.0.0.1:8888",
-    "groupId":["BE01C21FC04B93ACB2FE41E8DD327845"],
+    "sendGroupId":["BE01C21FC04B93ACB2FE41E8DD327845"],
+    "recvGroupId":[],
+    "serverName":"tester",
     "chatFormat":{
         "game":"<{name}> {msg}",
         "group":"群:<{nick}> {msg}"

@@ -4,7 +4,7 @@
 const VERSION = "0.0.1"
 const CONFIGPATH = "plugins/FlameHuo/config.json"
 const ALLOWLISTPATH = "plugins/FlameHuo/allowlist.json"
-const BDSALLOWLISTPATH  = "allowlist.json"
+const BDSALLOWLISTPATH = "allowlist.json"
 
 logger.setTitle("FlameHuo")
 
@@ -127,8 +127,8 @@ class FWebsocketClient {
     _processMessage(data) {
         try {
 
-            let type = data["type"];
-            let group = data["groupId"]
+            let type = data.type;
+            let group = data.groupId
 
             let config = readFile(CONFIGPATH)
             let allowlist = readFile(ALLOWLISTPATH);
@@ -176,9 +176,9 @@ class FWebsocketClient {
                 case "cmd":
                     let outputCmd = mc.runcmdEx(data["cmd"]);
                     if (outputCmd.success) {
-                        this._Success("成功:" + outputCmd.output, group)
+                        this._Success(outputCmd.output, group)
                     } else {
-                        this._Error("错误:" + outputCmd.output, group)
+                        this._Error(outputCmd.output, group)
                     }
 
                     break
@@ -186,13 +186,13 @@ class FWebsocketClient {
                     let wl = readFile(BDSALLOWLISTPATH)
                     let BDSAllowlist = eval(wl);
                     let nameString = "服内白名单如下:\n"
-                    for(let i=0;i<BDSAllowlist.length;i++){
+                    for (let i = 0; i < BDSAllowlist.length; i++) {
                         nameString += BDSAllowlist[i]["name"];
-                        if(i < BDSAllowlist.length-1){
+                        if (i < BDSAllowlist.length - 1) {
                             nameString += "\n"
                         }
                     }
-                    this._sendMsg("queryWl",{"list":nameString,"uuid":data.uuid})
+                    this._sendMsg("queryWl", { "list": nameString, "uuid": data.uuid })
 
             }
         } catch (e) {
@@ -231,7 +231,7 @@ class FWebsocketClient {
 
 function initWebsocketServer() {
     let config = readFile(CONFIGPATH)
-    let ws = new FWebsocketClient(config.wsUrl, "s", logger,)
+    let ws = new FWebsocketClient(config.wsUrl, config.serverName, logger,)
     ws._Connect().then((status) => {
         if (status) {
             logger.info("FlameHuo服务端连接成功.")
@@ -242,9 +242,9 @@ function initWebsocketServer() {
         let fmtStr = config.chatFormat.game
             .replace("{name}", pl.name)
             .replace("{msg}", msg)
-        for(let i=0;i<config.groupId.length;i++){
-            let group = config.groupId[i];
-            ws._sendMsg("sendMsg",{"group":group,"msg":fmtStr})
+        for (let i = 0; i < config.sendGroupId.length; i++) {
+            let group = config.sendGroupId[i];
+            ws._sendMsg("sendMsg", { "group": group, "msg": fmtStr })
         }
     })
 }
