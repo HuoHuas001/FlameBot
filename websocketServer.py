@@ -1,6 +1,7 @@
 import json
 import websockets
 from botpy import errors
+import uuid
 
 # 定义WebSocket服务器类
 class WebSocketServer:
@@ -41,9 +42,29 @@ class WebSocketServer:
         self.botApi = api
 
     #添加Callback事件
-    def addCallback(self,id,cbfunc):
+    def addCallbackFunc(self,id,cbfunc):
         self.callback[id] = cbfunc
+        return True
 
+    #进行回调事件
+    async def callBackFunc(self,callbackId:str,args):
+        if callbackId in self.callback:
+            try:
+                await self.callback[callbackId](args)
+            except Exception as e:
+                self.logger.error(f"[Websocket] {e}")
+                
+            del self.callback[callbackId]
+            return True
+        else:
+            self.logger.error("[Websocket] Callback Id不存在")
+            return False
+        
+    #命令客户端关闭连接
+    async def shutDownClient(self,client,code=1000,reson=""):
+        await self.sendClientMsg(client,"shutdown",{"msg":reson})
+        await client.close(code,reson)
+        
     #发送Bot消息
     async def sendGroupMsg(self,group,msg,client = None):
         try:
@@ -51,67 +72,87 @@ class WebSocketServer:
         except errors.ServerError:
             self.logger.error(f"{group} 不存在!")
             if(client != None):
-                await client.send(json.dumps({"type":"shutdown","msg":f"{group} 不存在!"},ensure_ascii=False))
-                await client.close(1003,"Client Error.")
+                await self.shutDownClient(client,1003,f"{group} 不存在!")
             return None
         
+    async def sendClientMsg(self,client,type="success",body={},unique_id = str(uuid.uuid4())):
+        data = {
+                "header":{
+                    "type":type,
+                    "id":unique_id
+                },
+                "body":body
+            }
+        await client.send(json.dumps(data,ensure_ascii=False))
 
+    #消息处理
     async def process_message(self, client, message):
         try:
             data = json.loads(message)
+            header = data["header"]
+            body = data["body"]
+            self.logger.info(data)
+            #Header参数
+            type = header["type"]
+            id = header["id"]
+            
             if not self.validate_data(data):
-                await client.send(json.dumps({"type":"error","error": "Invalid data"},ensure_ascii=False))
+                await self.sendClientMsg(client,"error",{"error": "Invalid data"})
                 return
+            
             # 处理消息
-            response = {"type": "success"}
-            if(data["type"] == "sendMsg"):
-                await self.sendGroupMsg(data["group"],data["msg"],client)
-                await client.send(json.dumps(response,ensure_ascii=False))
-            elif(data["type"] == "heart"):
+            if(type == "sendMsg"):
+                await self.sendGroupMsg(body["group"],body["msg"],client)
+                await self.sendClientMsg(client) #发送success信息
+
+            elif(type == "heart"):
                 await client.send(data)
-            elif(data["type"] == "success"):
-                if(data["uuid"] != ""):
-                    await self.callback[data["uuid"]]("执行成功:\n"+data["msg"])
-                    del self.callback[data["uuid"]]
+
+            elif(type == "success"):
+                if(id != ""):
+                    await self.callBackFunc(id,"执行成功:\n"+body["msg"])
                 else:
-                    await self.sendGroupMsg(data["group"],"执行成功:\n"+data["msg"],client)
-            elif(data["type"] == "error"):
-                if(data["uuid"] != ""):
-                    await self.callback[data["uuid"]]("执行失败:\n"+data["msg"])
-                    del self.callback[data["uuid"]]
+                    await self.sendGroupMsg(body["group"],"执行成功:\n"+body["msg"],client)
+
+            elif(type == "error"):
+                if(id != ""):
+                    await self.callBackFunc(id,"执行成功:\n"+body["msg"])
                 else:
-                    await self.sendGroupMsg(data["group"],"执行失败:\n"+data["msg"],client)
+                    await self.sendGroupMsg(body["group"],"执行成功:\n"+body["msg"],client)
+
+            elif(type == "shakeHand"):
+                if body["name"] not in self.registedServer:
+                    self.registedServer[body["name"]] = {"client":client,"group":body["group"]}
+                    for groupId in body["group"]:
+                        await self.sendGroupMsg(groupId,f'{body["name"]} 已连接FlameHuo',client)
+                        await self.sendClientMsg(client,"shaked",{"Code":1,"Msg":""})
+                else:
+                    await self.shutDownClient(client,1003,"Duplicate client registration information")
                 
-            elif(data["type"] == "shakeHand"):
-                self.registedServer[data["name"]] = {"client":client,"group":data["group"]}
-                for groupId in data["group"]:
-                    await self.sendGroupMsg(groupId,f'{data["name"]} 已连接FlameHuo',client)
-                await client.send(
-                    json.dumps(
-                        {"type":"shaked","Code":1,"Msg":""}
-                        ,ensure_ascii=False
-                        )
-                    )
-            elif(data["type"] == "queryWl"):
-                if data["uuid"] in self.callback:
-                    await self.callback[data["uuid"]](data["list"])
-                    del self.callback[data["uuid"]]
-                else:
+            elif(type == "queryWl"):
+                if not await self.callBackFunc(id,body["list"]):
+                    self.logger.error("[Websocket] Callback Id不存在")
+
+            elif(type == "queryOnline"):
+                if not await self.callBackFunc(id,body["list"]):
                     self.logger.error("[Websocket] Callback Id不存在")
             
         except json.JSONDecodeError:
-            await client.send(json.dumps({"type":"error","error": "Invalid JSON format"},ensure_ascii=False))
+            await self.sendClientMsg(client,"error",{"error": "Invalid JSON format"})
 
     #广播信息
-    async def broadcast(self, message,groupId=""):
+    async def broadcast(self,type: str,message: dict,groupId="",unique_id = str(uuid.uuid4())):
         message["groupId"] = groupId
         for connection in self.active_connections:
             try:
-                await connection.send(json.dumps(message,ensure_ascii=False))
+                await self.sendClientMsg(connection,type,message,unique_id)
             except websockets.exceptions.ConnectionClosed as e:
                 self.logger.error(f"Connection closed error: {e}")
                 self.active_connections.remove(connection)
                 
     def validate_data(self, data):
         # 这里可以添加具体的数据验证逻辑
-        return "type" in data and isinstance(data["type"], str)
+        return "header" in data and "body" in data and isinstance(data["header"], dict) and isinstance(data["body"], dict)
+    
+if __name__ == "__main__":
+    print("[Error] 请在index.py下运行")

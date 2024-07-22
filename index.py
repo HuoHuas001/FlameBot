@@ -3,6 +3,7 @@ import botpy
 from botpy import logging, BotAPI
 from botpy.ext.command_util import Commands
 from botpy.message import GroupMessage,MessageAudit
+from botpy.types.message import MarkdownPayload
 import asyncio
 import websockets
 import uuid
@@ -22,7 +23,7 @@ async def addAllowList(api: BotAPI, message: GroupMessage, params=None):
 
     unique_id = uuid.uuid4()
     await message.reply(content=f"已请求添加白名单.\nXbox Id:{params}\n请管理员核对.如有错误,请输入/删除 {unique_id}")
-    await server_instance.broadcast({"type":"add","xboxid":params,"uuid":str(unique_id)},message.group_openid)
+    await server_instance.broadcast("add",{"xboxid":params,"uuid":str(unique_id)},message.group_openid)
     return True
 
 @Commands("删除")
@@ -32,7 +33,7 @@ async def reCall(api: BotAPI, message: GroupMessage, params=None):
         return True
 
     await message.reply(content=f"已请求删除Id为{params}的白名单.")
-    await server_instance.broadcast({"type":"delete","uuid":params},message.group_openid)
+    await server_instance.broadcast("delete",{"uuid":params},message.group_openid)
     return True
 
 @Commands("帮助")
@@ -65,28 +66,53 @@ async def sendGameMsg(api: BotAPI, message: GroupMessage, params=None):
     if nick == None:
         await message.reply(content="没有找到你的昵称数据，请使用/设置昵称 {昵称}来设置")
     else:
-        await server_instance.broadcast({"type":"chat","msg":params,"nick":nick},message.group_openid)
+        await server_instance.broadcast("chat",{"msg":params,"nick":nick},message.group_openid)
 
     return True
 
 @Commands("执行命令")
 async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
-    unique_id = uuid.uuid4()
-    await server_instance.broadcast({"type":"cmd","cmd":params,"uuid":str(unique_id)},message.group_openid)
+    unique_id = str(uuid.uuid4())
+    await server_instance.broadcast("cmd",{"cmd":params},message.group_openid,unique_id)
     async def cmdReply(msg):
-        ret = await message.reply(content=msg)
+        ret = await message.reply(content=msg,msg_seq=2)
         #_log.info(ret)
-    server_instance.addCallback(str(unique_id),cmdReply)
-    #await message.reply(content="已向服务器发送命令，请等待执行.")
+    server_instance.addCallbackFunc(unique_id,cmdReply)
+    await message.reply(content="已向服务器发送命令，请等待执行.")
     return True
 
 @Commands("查白名单")
 async def queryWl(api: BotAPI, message: GroupMessage, params=None):
-    unique_id = uuid.uuid4()
-    await server_instance.broadcast({"type":"queryList","uuid":str(unique_id)},message.group_openid)
+    #api.post_group_message(msg_seq=1000)
+    unique_id = str(uuid.uuid4())
+    await server_instance.broadcast("queryList",{},message.group_openid,unique_id)
     async def wlReply(msg):
         await message.reply(content=msg)
-    server_instance.addCallback(str(unique_id),wlReply)
+    server_instance.addCallbackFunc(unique_id,wlReply)
+    return True
+
+@Commands("查在线")
+async def queryOnline(api: BotAPI, message: GroupMessage, params=None):
+    unique_id = str(uuid.uuid4())
+    await server_instance.broadcast("queryOnline",{},message.group_openid,unique_id)
+    async def onlineReply(msg):
+        markdown = MarkdownPayload(
+            custom_template_id="102147135_1721645887",
+            params=[
+                {
+				    "key": "title",
+				    "values": ["在线玩家列表"]
+			    },
+                {
+				    "key": "content",
+				    "values": [msg]
+			    },
+            ])
+        try:
+            await message.reply(msg_type=2,markdown=markdown)
+        except errors.ServerError as e:
+            await message.reply(content=f"在线玩家列表:\n{msg}")
+    server_instance.addCallbackFunc(unique_id,onlineReply)
     return True
 
 #BotPy主框架
@@ -105,7 +131,8 @@ class BotClient(botpy.Client):
             setGroupName,
             sendGameMsg,
             sendCmd,
-            queryWl
+            queryWl,
+            queryOnline,
         ]
         for handler in handlers:
             if await handler(api=self.api, message=message):
