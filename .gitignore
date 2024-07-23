@@ -4,6 +4,7 @@ botpy.log
 nickName.json
 websocketTest.py
 temp.*
+configS.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

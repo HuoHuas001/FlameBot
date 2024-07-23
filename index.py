@@ -21,6 +21,8 @@ async def addAllowList(api: BotAPI, message: GroupMessage, params=None):
         await message.reply(content=f"参数不正确，请使用 /帮助 来查看帮助")
         return True
 
+    if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
+        return True
     unique_id = uuid.uuid4()
     await message.reply(content=f"已请求添加白名单.\nXbox Id:{params}\n请管理员核对.如有错误,请输入/删除 {unique_id}")
     await server_instance.broadcast("add",{"xboxid":params,"uuid":str(unique_id)},message.group_openid)
@@ -31,7 +33,9 @@ async def reCall(api: BotAPI, message: GroupMessage, params=None):
     if(not params):
         await message.reply(content=f"参数不正确，请使用 /帮助 来查看帮助")
         return True
-
+    
+    if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
+        return True
     await message.reply(content=f"已请求删除Id为{params}的白名单.")
     await server_instance.broadcast("delete",{"uuid":params},message.group_openid)
     return True
@@ -45,6 +49,44 @@ async def help(api: BotAPI, message: GroupMessage, params=None):
 async def queryGroup(api: BotAPI, message: GroupMessage, params=None):
     groupId = message.group_openid
     await message.reply(content=f"本群OpenId:{groupId}")
+    return True
+
+@Commands("查自己")
+async def queryMe(api: BotAPI, message: GroupMessage, params=None):
+    authorId = message.author.member_openid
+    await message.reply(content=f"你的OpenId:{authorId}")
+    return True
+
+@Commands("加管理")
+async def addAdmin(api: BotAPI, message: GroupMessage, params=None):
+    if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
+        return True
+    groupId,authorId = splitCommandParams(params)
+    await addGroupAdmin(groupId,authorId)
+    await message.reply(content=f"已向{groupId}的群聊中添加了管理员:{authorId}")
+    return True
+
+@Commands("查管理")
+async def queryAdmin(api: BotAPI, message: GroupMessage, params=None):
+    if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
+        return True
+    groupId,authorId = splitCommandParams(params)
+    ret = await queryIsAdmin(groupId,authorId)
+    if(ret):
+        ret = "有"
+    else:
+        ret = "无"
+    await message.reply(content=f"{groupId}的群聊中,管理员{authorId}{ret}权限")
+    return True
+
+@Commands("删管理")
+async def delAdmin(api: BotAPI, message: GroupMessage, params=None):
+    if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
+        return True
+    groupId,authorId = splitCommandParams(params)
+    ret = await delGroupAdmin(groupId,authorId)
+    if(ret):
+        await message.reply(content=f"已向{groupId}的群聊中删除了管理员:{authorId}")
     return True
 
 @Commands("设置名称")
@@ -72,6 +114,10 @@ async def sendGameMsg(api: BotAPI, message: GroupMessage, params=None):
 
 @Commands("执行命令")
 async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
+    aaaa = await queryIsAdmin(message.group_openid,message.author.member_openid)
+    _log.info(aaaa)
+    if(not aaaa):
+        return True
     unique_id = str(uuid.uuid4())
     await server_instance.broadcast("cmd",{"cmd":params},message.group_openid,unique_id)
     async def cmdReply(msg):
@@ -83,6 +129,8 @@ async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
 
 @Commands("查白名单")
 async def queryWl(api: BotAPI, message: GroupMessage, params=None):
+    if(not queryIsAdmin(message.group_openid,message.author.member_openid)):
+        return True
     #api.post_group_message(msg_seq=1000)
     unique_id = str(uuid.uuid4())
     await server_instance.broadcast("queryList",{},message.group_openid,unique_id)
@@ -111,7 +159,8 @@ async def queryOnline(api: BotAPI, message: GroupMessage, params=None):
         try:
             await message.reply(msg_type=2,markdown=markdown)
         except errors.ServerError as e:
-            await message.reply(content=f"在线玩家列表:\n{msg}")
+            rpMsg = msg.replace("\u200b","\n")
+            await message.reply(content=f"在线玩家列表:\n{rpMsg}")
     server_instance.addCallbackFunc(unique_id,onlineReply)
     return True
 
@@ -133,6 +182,10 @@ class BotClient(botpy.Client):
             sendCmd,
             queryWl,
             queryOnline,
+            queryMe,
+            delAdmin,
+            queryAdmin,
+            addAdmin
         ]
         for handler in handlers:
             if await handler(api=self.api, message=message):
@@ -157,11 +210,11 @@ async def create_server():
     return server_instance
 
 # 启动WebSocket服务器的函数
-async def start_server(host="localhost", port=8888):
+async def start_server(host="0.0.0.0", port=8765):
     server = await create_server()  # 获取服务器实例
     async with websockets.serve(server.handler, host, port):
-            _log.info(f"[Websocket] Server started on ws://{host}:{port}")
-            await asyncio.Future()  # 运行服务器直到被取消
+        _log.info(f"[Websocket] Server started on ws://{host}:{port}")
+        await asyncio.Future()  # 运行服务器直到被取消
 
 # 主函数，用于启动WebSocket服务器
 async def main():

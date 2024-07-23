@@ -3,6 +3,7 @@
     "sendGroupId":["BE01C21FC04B93ACB2FE41E8DD327845"],
     "recvGroupId":[],
     "serverName":"tester",
+    "addSimulatedPlayerTip":true,
     "chatFormat":{
         "game":"<{name}> {msg}",
         "group":"群:<{nick}> {msg}"

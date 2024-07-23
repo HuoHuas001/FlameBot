@@ -7,7 +7,7 @@ from botpy import logging, BotAPI
 from botpy.ext.command_util import Commands
 from botpy.message import GroupMessage
 from botpy.ext.cog_yaml import read
-from config import *
+from configS import *
 _log = logging.get_logger()
 
 
@@ -49,6 +49,11 @@ async def queryWl(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content="现在还没有白名单")
     return True
 
+@Commands("查在线")
+async def queryOnline(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content="在线玩家：0")
+    return True
+
 class MyClient(botpy.Client):
     async def on_group_at_message_create(self, message):
         # 注册指令handler
@@ -59,7 +64,8 @@ class MyClient(botpy.Client):
             queryGroup,
             setGroupName,
             sendGameMsg,
-            queryWl
+            queryWl,
+            queryOnline
         ]
         for handler in handlers:
             if await handler(api=self.api, message=message):

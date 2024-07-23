@@ -2,6 +2,7 @@ import json
 import websockets
 from botpy import errors
 import uuid
+from basic import *
 
 # 定义WebSocket服务器类
 class WebSocketServer:
@@ -35,8 +36,9 @@ class WebSocketServer:
                 self.logger.info(f"[Websocket] Client Disconnect: {i}")
                 for groupId in self.registedServer[i]["group"]:
                     await self.sendGroupMsg(groupId,f"{i} 已断开与FlameHuo的连接,请管理员检查是否存在问题")
+                del self.registedServer[i]
                 break
-        
+                
     #获取botApi
     def botAPI(self,api):
         self.botApi = api
@@ -85,6 +87,18 @@ class WebSocketServer:
             }
         await client.send(json.dumps(data,ensure_ascii=False))
 
+    #执行内置语句
+    async def websocketAdminProcess(self,client,body):
+        if(body["type"] == "addGroupAdmin"):
+            await addGroupAdmin(body["groupId"],body["authorId"])
+            await self.sendClientMsg(client,"success",{})
+        elif(body["type"] == "isGroupAdmin"):
+            isGroupAdminRet = await queryIsAdmin(body["groupId"],body["authorId"])
+            await self.sendClientMsg(client,"success",{"ret":isGroupAdminRet})
+        elif(body["type"] == "delGroupAdmin"):
+            delGroupAdminRet = await delGroupAdmin(body["groupId"],body["authorId"])
+            await self.sendClientMsg(client,"success",{"ret":delGroupAdminRet})
+
     #消息处理
     async def process_message(self, client, message):
         try:
@@ -92,6 +106,7 @@ class WebSocketServer:
             header = data["header"]
             body = data["body"]
             self.logger.info(data)
+
             #Header参数
             type = header["type"]
             id = header["id"]
@@ -125,8 +140,9 @@ class WebSocketServer:
                     self.registedServer[body["name"]] = {"client":client,"group":body["group"]}
                     for groupId in body["group"]:
                         await self.sendGroupMsg(groupId,f'{body["name"]} 已连接FlameHuo',client)
-                        await self.sendClientMsg(client,"shaked",{"Code":1,"Msg":""})
+                        await self.sendClientMsg(client,"shaked",{"code":1,"msg":""})
                 else:
+                    await self.sendClientMsg(client,"shaked",{"code":2,"msg":"Duplicate client registration information"})
                     await self.shutDownClient(client,1003,"Duplicate client registration information")
                 
             elif(type == "queryWl"):
@@ -136,6 +152,12 @@ class WebSocketServer:
             elif(type == "queryOnline"):
                 if not await self.callBackFunc(id,body["list"]):
                     self.logger.error("[Websocket] Callback Id不存在")
+
+            elif(type == "websocketAdmin"):
+                if(body["Adminkey"] == "flameHuo@HuoHuas001"):
+                    await self.websocketAdminProcess(client,body)
+                else:
+                    await self.sendClientMsg(client,"error",{"msg":"AdminkeyError"})
             
         except json.JSONDecodeError:
             await self.sendClientMsg(client,"error",{"error": "Invalid JSON format"})
@@ -149,6 +171,7 @@ class WebSocketServer:
             except websockets.exceptions.ConnectionClosed as e:
                 self.logger.error(f"Connection closed error: {e}")
                 self.active_connections.remove(connection)
+
                 
     def validate_data(self, data):
         # 这里可以添加具体的数据验证逻辑

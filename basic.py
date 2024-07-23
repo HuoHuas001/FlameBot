@@ -2,6 +2,7 @@ import aiofiles
 import json
 import re
 file_path = "nickName.json"
+admin_path = "adminList.json"
 
 #切割命令参数
 def splitCommandParams(params: str):
@@ -61,6 +62,43 @@ async def queryName(memberData):
         return None
     return data_dict[memberData["groupId"]][memberData["author"]]
 
+
+#查询管理员
+async def queryIsAdmin(groupId,authorId):
+    async with aiofiles.open(admin_path, 'r', encoding='utf-8') as file:
+        data = await file.read()
+        data_dict = json.loads(data)
+    if(groupId not in data_dict):
+        return False
+    if(authorId not in data_dict[groupId]):
+        return False
+    return True
+
+#添加群组管理员
+async def addGroupAdmin(groupId,authorId):
+    async with aiofiles.open(admin_path, 'r', encoding='utf-8') as file:
+        data = await file.read()
+        data_dict = json.loads(data)
+    if groupId not in data_dict:
+        data_dict[groupId] = []
+    if authorId in data_dict[groupId]:
+        return True
+    data_dict[groupId].append(authorId)
+    async with aiofiles.open(admin_path, 'w', encoding='utf-8') as file:
+        await file.write(json.dumps(data_dict, indent=4, ensure_ascii=False))
+    return True
+
+#删除群组管理员
+async def delGroupAdmin(groupId,authorId):
+    async with aiofiles.open(admin_path, 'r', encoding='utf-8') as file:
+        data = await file.read()
+        data_dict = json.loads(data)
+    if groupId not in data_dict:
+        return True
+    data_dict[groupId] = list(filter(lambda x: x == authorId, data_dict[groupId]))
+    async with aiofiles.open(admin_path, 'w', encoding='utf-8') as file:
+        await file.write(json.dumps(data_dict, indent=4, ensure_ascii=False))
+    return True
 
 #添加玩家NickName
 async def update_json_data(file_path, update_func,memberData):
