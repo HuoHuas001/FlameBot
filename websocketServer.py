@@ -48,6 +48,22 @@ class WebSocketServer:
         self.callback[id] = cbfunc
         return True
 
+    #查询连接的客户端
+    def queryClientList(self):
+        clientList = {}
+        unKnownId = 1
+        for client in self.active_connections:
+            flag = True
+            for clientName in self.registedServer:
+                if(self.registedServer[clientName]["client"] == client):
+                   flag = False
+                   clientList[clientName] = client
+            if(flag):
+                clientList[f"unknown_Client_{unKnownId}"] = client
+                unKnownId += 1
+        return clientList
+                
+
     #进行回调事件
     async def callBackFunc(self,callbackId:str,args):
         if callbackId in self.callback:
@@ -105,11 +121,14 @@ class WebSocketServer:
             data = json.loads(message)
             header = data["header"]
             body = data["body"]
-            self.logger.info(data)
+            
 
             #Header参数
             type = header["type"]
             id = header["id"]
+
+            if(type != "heart"):
+                self.logger.info(data)
             
             if not self.validate_data(data):
                 await self.sendClientMsg(client,"error",{"error": "Invalid data"})
@@ -121,19 +140,19 @@ class WebSocketServer:
                 await self.sendClientMsg(client) #发送success信息
 
             elif(type == "heart"):
-                await client.send(data)
+                await self.sendClientMsg(client,"heart",{})
 
             elif(type == "success"):
                 if(id != ""):
-                    await self.callBackFunc(id,"执行成功:\n"+body["msg"])
+                    await self.callBackFunc(id,body["msg"])
                 else:
                     await self.sendGroupMsg(body["group"],"执行成功:\n"+body["msg"],client)
 
             elif(type == "error"):
                 if(id != ""):
-                    await self.callBackFunc(id,"执行成功:\n"+body["msg"])
+                    await self.callBackFunc(id,body["msg"])
                 else:
-                    await self.sendGroupMsg(body["group"],"执行成功:\n"+body["msg"],client)
+                    await self.sendGroupMsg(body["group"],"执行失败:\n"+body["msg"],client)
 
             elif(type == "shakeHand"):
                 if body["name"] not in self.registedServer:
@@ -167,7 +186,7 @@ class WebSocketServer:
         message["groupId"] = groupId
         for connection in self.active_connections:
             try:
-                await self.sendClientMsg(connection,type,message,unique_id)
+                await self.sendClientMsg(connection,type,message,str(unique_id))
             except websockets.exceptions.ConnectionClosed as e:
                 self.logger.error(f"Connection closed error: {e}")
                 self.active_connections.remove(connection)

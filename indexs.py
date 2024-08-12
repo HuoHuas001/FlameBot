@@ -7,7 +7,7 @@ from botpy import logging, BotAPI
 from botpy.ext.command_util import Commands
 from botpy.message import GroupMessage
 from botpy.ext.cog_yaml import read
-from configS import *
+from config import *
 _log = logging.get_logger()
 
 
@@ -17,10 +17,10 @@ async def addAllowList(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content=f"已添加白名单")
     return True
 
-@Commands("撤销")
+@Commands("删除")
 async def reCall(api: BotAPI, message: GroupMessage, params=None):
     _log.info(params)
-    await message.reply(content=f"已撤销白名单")
+    await message.reply(content=f"已删除白名单")
     return True
 
 @Commands("帮助")
@@ -34,6 +34,26 @@ async def queryGroup(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content=f"本群群号:{groupId}")
     return True
 
+@Commands("查自己")
+async def queryMe(api: BotAPI, message: GroupMessage, params=None):
+    authorId = message.author.member_openid
+    await message.reply(content=f"你的OpenId:{authorId}")
+    return True
+
+@Commands("加管理")
+async def addAdmin(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content=f"已添加了管理员:{params}")
+    return True
+
+@Commands("查管理")
+async def queryAdmin(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content=f"你不是管理员")
+
+@Commands("删管理")
+async def delAdmin(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content=f"已删除了管理员:{params}")
+    return True
+
 @Commands("设置名称")
 async def setGroupName(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content=f"已设置")
@@ -42,6 +62,11 @@ async def setGroupName(api: BotAPI, message: GroupMessage, params=None):
 @Commands("发信息")
 async def sendGameMsg(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content="你好呀，我是FlameHuo")
+    return True
+
+@Commands("执行命令")
+async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content=f"已执行命令")
     return True
 
 @Commands("查白名单")
@@ -54,6 +79,11 @@ async def queryOnline(api: BotAPI, message: GroupMessage, params=None):
     await message.reply(content="在线玩家：0")
     return True
 
+@Commands("在线服务器")
+async def queryClientList(api: BotAPI, message: GroupMessage, params=None):
+    await message.reply(content="暂时没有在线的服务器")
+    return True
+
 class MyClient(botpy.Client):
     async def on_group_at_message_create(self, message):
         # 注册指令handler
@@ -64,8 +94,14 @@ class MyClient(botpy.Client):
             queryGroup,
             setGroupName,
             sendGameMsg,
+            sendCmd,
             queryWl,
-            queryOnline
+            queryOnline,
+            queryMe,
+            delAdmin,
+            queryAdmin,
+            addAdmin,
+            queryClientList
         ]
         for handler in handlers:
             if await handler(api=self.api, message=message):

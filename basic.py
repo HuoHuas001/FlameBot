@@ -114,3 +114,9 @@ def modify_data(data,memberData):
         data[memberData["groupId"]] = {}
     data[memberData["groupId"]][memberData["author"]] = memberData["nick"]
     return data
+
+#查询是否是符合数字
+def isNumber(data:str):
+    if(data.isdigit() and int(data) >= 0):
+        return True
+    return False

@@ -14,18 +14,23 @@ from websocketServer import *
 
 _log = logging.get_logger()    #Botpy Logger
 server_instance = None         #websocketServer全局变量
+help_path="help.txt"
 
 @Commands("添加白名单")
 async def addAllowList(api: BotAPI, message: GroupMessage, params=None):
     if(not params):
         await message.reply(content=f"参数不正确，请使用 /帮助 来查看帮助")
         return True
-
     if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
         return True
-    unique_id = uuid.uuid4()
-    await message.reply(content=f"已请求添加白名单.\nXbox Id:{params}\n请管理员核对.如有错误,请输入/删除 {unique_id}")
-    await server_instance.broadcast("add",{"xboxid":params,"uuid":str(unique_id)},message.group_openid)
+    
+
+    unique_id = str(uuid.uuid4())
+    async def wlReply(msg):
+        ret = await message.reply(content=msg,msg_seq=2)
+    server_instance.addCallbackFunc(unique_id,wlReply)
+    await message.reply(content=f"已请求添加白名单.\nXbox Id:{params}\n请管理员核对.如有错误,请输入/删除 {params}")
+    await server_instance.broadcast("add",{"xboxid":params},message.group_openid,unique_id)
     return True
 
 @Commands("删除")
@@ -36,13 +41,21 @@ async def reCall(api: BotAPI, message: GroupMessage, params=None):
     
     if(not await queryIsAdmin(message.group_openid,message.author.member_openid)):
         return True
-    await message.reply(content=f"已请求删除Id为{params}的白名单.")
-    await server_instance.broadcast("delete",{"uuid":params},message.group_openid)
+    
+
+    unique_id = str(uuid.uuid4())
+    async def wlReply(msg):
+        ret = await message.reply(content=msg,msg_seq=2)
+    server_instance.addCallbackFunc(unique_id,wlReply)
+    await message.reply(content=f"已请求删除Xboxid为{params}的白名单.")
+    await server_instance.broadcast("delete",{"xboxid":params},message.group_openid,unique_id)
     return True
 
 @Commands("帮助")
 async def help(api: BotAPI, message: GroupMessage, params=None):
-    await message.reply(content='FlameHuo帮助:\n/添加白名单 {Xbox Id}\n/删除 {uuid}\n/帮助\n/查群号\n/设置名称 {昵称}\n/发信息 {消息}\n注:若XboxId有空格请打上双引号,如:"XboxId"')
+    async with aiofiles.open(help_path, 'r', encoding='utf-8') as file:
+        data = await file.read()
+    await message.reply(content=data)
     return True
 
 @Commands("查群号")
@@ -122,7 +135,6 @@ async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
     await server_instance.broadcast("cmd",{"cmd":params},message.group_openid,unique_id)
     async def cmdReply(msg):
         ret = await message.reply(content=msg,msg_seq=2)
-        #_log.info(ret)
     server_instance.addCallbackFunc(unique_id,cmdReply)
     await message.reply(content="已向服务器发送命令，请等待执行.")
     return True
@@ -131,9 +143,15 @@ async def sendCmd(api: BotAPI, message: GroupMessage, params=None):
 async def queryWl(api: BotAPI, message: GroupMessage, params=None):
     if(not queryIsAdmin(message.group_openid,message.author.member_openid)):
         return True
-    #api.post_group_message(msg_seq=1000)
     unique_id = str(uuid.uuid4())
-    await server_instance.broadcast("queryList",{},message.group_openid,unique_id)
+
+    #有无参数
+    if(params == '' or params == None):
+        await server_instance.broadcast("queryList",{},message.group_openid,unique_id)
+    elif(isNumber(params)):
+        await server_instance.broadcast("queryList",{"page":int(params)},message.group_openid,unique_id)
+    else:
+        await server_instance.broadcast("queryList",{"key":params},message.group_openid,unique_id)
     async def wlReply(msg):
         await message.reply(content=msg)
     server_instance.addCallbackFunc(unique_id,wlReply)
@@ -164,6 +182,15 @@ async def queryOnline(api: BotAPI, message: GroupMessage, params=None):
     server_instance.addCallbackFunc(unique_id,onlineReply)
     return True
 
+@Commands("在线服务器")
+async def queryClientList(api: BotAPI, message: GroupMessage, params=None):
+    clientList = server_instance.queryClientList()
+    clientText = ""
+    for i in clientList:
+        clientText += i+'\n'
+    await message.reply(content=f"已连接flameHuo的服务器:\n{clientText}")
+    return True
+
 #BotPy主框架
 class BotClient(botpy.Client):
     def postApi(self):
@@ -185,7 +212,8 @@ class BotClient(botpy.Client):
             queryMe,
             delAdmin,
             queryAdmin,
-            addAdmin
+            addAdmin,
+            queryClientList
         ]
         for handler in handlers:
             if await handler(api=self.api, message=message):

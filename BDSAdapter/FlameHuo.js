@@ -1,10 +1,10 @@
 //LiteLoaderScript Dev Helper
 /// <reference path="E:\\MCServer\\HelperLib\\src\\index.d.ts"/> 
 
-const VERSION = "0.0.1"
+const VERSION = "0.0.3"
 const PATH = "plugins/FlameHuo/"
 const CONFIGPATH = `${PATH}config.json`
-const ALLOWLISTPATH = `${PATH}allowlist.json`
+//const ALLOWLISTPATH = `${PATH}allowlist.json`
 const BLOCKPATH = `${PATH}blockMsg.json`
 const BDSALLOWLISTPATH = "allowlist.json"
 
@@ -29,6 +29,39 @@ function writeFile(file, data) {
     return File.writeTo(file, JSON.stringify(data, null, '\t'))
 }
 
+/**
+ * 分割数组
+ * @param {Array} array 
+ * @param {number} itemsPerPage 
+ * @returns 
+ */
+function paginateArray(array, itemsPerPage) {
+    let pages = [];
+    for (let i = 0; i < array.length; i += itemsPerPage) {
+        pages.push(array.slice(i, i + itemsPerPage));
+    }
+    return pages;
+}
+
+/**
+ * 数组搜索关键词
+ * @param {Array} array 需要查询的数组
+ * @param {string} keyword 关键词
+ * @param {boolean} caseInsensitive 是否进行大小写不敏感的搜索
+ * @returns 
+ */
+function filterByKeyword(array, keyword, caseInsensitive = true) {
+    // 使用filter方法查询包含关键词的元素
+    return array.filter(item => {
+        // 如果需要大小写不敏感的搜索，将item和keyword都转换为小写
+        if (caseInsensitive) {
+            return item.toLowerCase().includes(keyword.toLowerCase());
+        } else {
+            return item.includes(keyword);
+        }
+    });
+}
+
 class FWebsocketClient {
     constructor(connectLink, name, log) {
         this.name = name;
@@ -41,6 +74,7 @@ class FWebsocketClient {
         this.connectLink = connectLink;
         this.isShakeHand = false;
         this.tryConnect = false;
+        this.heart = null;
 
         //事件监听
         this.Events = {
@@ -109,10 +143,14 @@ class FWebsocketClient {
         wsc.listen("onError", (msg) => {
             logger.error(`WSC出现异常: ${msg}`);
             logger.info(`自动重连中...`);
-            this._ReConnect();
+            setTimeout(this._ReConnect, 3 * 1000);
         });
         wsc.listen("onLostConnection", (code) => {
             logger.warn(`WSC服务器连接丢失!CODE: ${code}`);
+            if (this.heart) {
+                clearInterval(this.heart)
+            }
+
             if ([1008, 1003].indexOf(code) == -1 && this.tryConnect) {
                 logger.info(`正在尝试重新连接...`);
                 this.tryConnect = false;
@@ -122,12 +160,15 @@ class FWebsocketClient {
                     if (reConnectCount >= 5) {
                         logger.warn("已超过自动重连次数，请检查后输入/flamehuo reconnect重连");
                     } else {
-                        this._ReConnect().then((code) => {
-                            if (!code) {
-                                logger.warn(`连接失败!重新尝试中...`);
-                                reConnect();
-                            }
-                        });
+                        setTimeout(() => {
+                            this._ReConnect().then((code) => {
+                                if (!code) {
+                                    logger.warn(`连接失败!重新尝试中...`);
+                                    reConnect();
+                                }
+                            });
+                        }, 3 * 1000);
+
                     }
                 };
                 reConnect();
@@ -140,12 +181,13 @@ class FWebsocketClient {
         wsc.listen("onTextReceived", (msg) => {
             try {
                 let json = JSON.parse(msg);
+                //log(json)
                 this._processMessage(json.header, json.body);
             } catch (_) {
                 logger.logger.error(_)
                 logger.error(`WSC无法解析接收到的字符串!`);
                 logger.info(`重新尝试连接...`);
-                this._ReConnect();
+                setTimeout(this._ReConnect, 3 * 1000);
             }
         });
     }
@@ -177,7 +219,7 @@ class FWebsocketClient {
             logger.error(`在运行事件[${type}]时遇到错误: ${e}\n${e.stack}`);
             if (type != "shutdown") {
                 logger.info(`正在重新连接...`);
-                this._ReConnect();
+                setTimeout(this._ReConnect, 3 * 1000);
             }
 
 
@@ -192,7 +234,7 @@ class FWebsocketClient {
     _processMessage(header, body) {
         if (header.id == null) {
             logger.info(`收到特殊消息: ${body.msg}, 正在尝试重新连接...`);
-            this._ReConnect();
+            setTimeout(this._ReConnect, 3 * 1000);
             return;
         }
         try {
@@ -226,6 +268,9 @@ class FWebsocketClient {
             this.continueHeart = 0;
             this.isShakeHand = true;
             this.tryConnect = true;
+            this.heart = setInterval(() => {
+                this._sendMsg("heart", {})
+            }, 5 * 1000)
         } else {
             logger.error(`握手失败!原因: ${body.msg}`);
         }
@@ -252,11 +297,11 @@ class FWebsocketClient {
      * @param {object} body 
      */
     onAddAllowList(id, body) {
-        let allowlist = readFile(ALLOWLISTPATH);
-        allowlist[body.uuid] = body.xboxid
         let outputAdd = mc.runcmdEx(`allowlist add ${body.xboxid}`)
-        if (writeFile(ALLOWLISTPATH, allowlist)) {
-            this._Success(outputAdd.output, group)
+        if (outputAdd.success) {
+            this._Respone(`${this.name}已接受添加名为${body.xboxid}的白名单请求\n返回如下:${outputAdd.output}`, body.groupId, "success", id)
+        } else {
+            this._Respone(`${this.name}已拒绝添加名为${body.xboxid}的白名单请求\n返回如下:${outputAdd.output}`, body.groupId, "error", id)
         }
     }
 
@@ -266,16 +311,13 @@ class FWebsocketClient {
      * @param {object} body 
      */
     onDelAllowList(id, body) {
-        let allowlist = readFile(ALLOWLISTPATH);
-        if (body.uuid in Object.keys(allowlist)) {
-            let outputDel = mc.runcmdEx(`allowlist remove ${allowlist[body.uuid]}`);
-            delete allowlist[body.uuid];
-            if (writeFile(ALLOWLISTPATH, allowlist)) {
-                this._Respone(outputDel.output, group, "success")
-            }
+        let outputDel = mc.runcmdEx(`allowlist remove ${body.xboxid}`);
+        if (outputDel.success) {
+            this._Respone(`${this.name}已接受删除名为${body.xboxid}的白名单请求\n返回如下:${outputDel.output}`, body.groupId, "success", id)
         } else {
-            this._Respone("UUID不存在", group, "error")
+            this._Respone(`${this.name}已拒绝删除名为${body.xboxid}的白名单请求\n返回如下:${outputDel.output}`, body.groupId, "success", id)
         }
+
     }
 
     /**
@@ -286,9 +328,9 @@ class FWebsocketClient {
     onRunCmd(id, body) {
         let outputCmd = mc.runcmdEx(body.cmd);
         if (outputCmd.success) {
-            this._Respone(outputCmd.output,body.groupId,"success", id)
+            this._Respone("执行成功:\n" + outputCmd.output, body.groupId, "success", id)
         } else {
-            this._Respone(outputCmd.output, body.groupId,"error", id)
+            this._Respone("执行失败:\n" + outputCmd.output, body.groupId, "error", id)
         }
     }
 
@@ -300,14 +342,58 @@ class FWebsocketClient {
     onQueryAllowList(id, body) {
         let wl = readFile(BDSALLOWLISTPATH)
         let BDSAllowlist = eval(wl);
-        let allowlistNameString = "服内白名单如下:\n"
+        let nameList = []
         for (let i = 0; i < BDSAllowlist.length; i++) {
-            allowlistNameString += BDSAllowlist[i]["name"];
-            if (i < BDSAllowlist.length - 1) {
-                allowlistNameString += "\n"
-            }
+            nameList.push(BDSAllowlist[i]["name"]);
         }
-        this._sendMsg("queryWl", { "list": allowlistNameString }, id)
+
+        if ('key' in body) {
+            if (body.key.length < 2) {
+                let allowlistNameString = `查询白名单关键词:${body.key}结果如下:\n`
+                allowlistNameString += '请使用两个字母及以上的关键词进行查询!'
+                this._sendMsg("queryWl", { "list": allowlistNameString }, id)
+                return;
+            }
+            let allowlistNameString = `查询白名单关键词:${body.key}结果如下:\n`
+            let filterList = filterByKeyword(nameList, body.key)
+            if (filterList.length == 0) {
+                allowlistNameString += '无结果'
+            } else {
+                for (let i = 0; i < filterList.length; i++) {
+                    allowlistNameString += filterList[i] + "\n";
+                }
+                allowlistNameString += `共有${filterList.length}个结果`
+            }
+
+            this._sendMsg("queryWl", { "list": allowlistNameString }, id)
+        }
+        else if ('page' in body) {
+            let allowlistNameString = "服内白名单如下:\n"
+            let splitedNameList = paginateArray(nameList, 10)
+            let firstNameList = splitedNameList[body.page - 1]
+            if (body.page - 1 > splitedNameList.length) {
+                allowlistNameString += `没有该页码\n`
+                allowlistNameString += `共有${splitedNameList.length}页\n请使用/查白名单 {页码}来翻页`
+            } else {
+                for (let i = 0; i < firstNameList.length; i++) {
+                    allowlistNameString += firstNameList[i] + "\n";
+                }
+                allowlistNameString += `共有${splitedNameList.length}页，当前为第${body.page}页\n请使用/查白名单 {页码}来翻页`
+            }
+
+            this._sendMsg("queryWl", { "list": allowlistNameString }, id)
+        }
+        else {
+            let allowlistNameString = "服内白名单如下:\n"
+            let splitedNameList = paginateArray(nameList, 10)
+            let firstNameList = splitedNameList[0]
+            for (let i = 0; i < firstNameList.length; i++) {
+                allowlistNameString += firstNameList[i] + "\n";
+            }
+            allowlistNameString += `共有${splitedNameList.length}页，当前为第${1}页\n请使用/查白名单 {页码}来翻页`
+            this._sendMsg("queryWl", { "list": allowlistNameString }, id)
+        }
+
     }
 
     /**
@@ -326,7 +412,7 @@ class FWebsocketClient {
             }
             onlineNameString += online[i].name + simulated;
             if (i < online.length - 1) {
-                onlineNameString += "\n"
+                onlineNameString += "\u200B"
             }
         }
         this._sendMsg("queryOnline", { "list": onlineNameString }, id)
@@ -444,9 +530,11 @@ function blockGui(pl) {
     let block = readFile(BLOCKPATH)
     fm.addSwitch("是否接收群消息", queryBlock(pl.xuid));
     pl.sendForm(fm, (pl, da) => {
-        block[pl.xuid] = da[0];
-        if (writeFile(BLOCKPATH, block)) {
-            pl.tell("设置成功")
+        if (da) {
+            block[pl.xuid] = da[0];
+            if (writeFile(BLOCKPATH, block)) {
+                pl.tell("设置成功")
+            }
         }
     })
 }
