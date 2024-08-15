@@ -5,12 +5,13 @@
 
 ## 安装
 1. 安装python 3.9+
-2. 执行如下命令
+2. 克隆本仓库
+3. 执行如下命令
 ```bash
 pip install -r requirements.txt
 ```
-3. 将`BDSAdapter`中的`FlameHuo.js`文件放入BDS/plugins文件夹内，创建文件夹完毕后，将剩余文件放入`FlameHuo`文件夹
-4. 对`config.json`进行配置
+4. 将`BDSAdapter`中的`FlameHuo.js`文件放入BDS/plugins文件夹内，创建文件夹完毕后，将剩余文件放入`FlameHuo`文件夹
+5. 对`config.json`进行配置
     - sendGroupId和recvGroupId可在机器人正式上线后使用`/查本群`来查询
     - wsUrl在程序正常运行之后会输出
     - serverName可自行更改
@@ -36,6 +37,7 @@ python index.py
 4. 按模板配置指令(请参考下列`功能一览`)
 ![模板](Imgs/6.png)
 - ⚠ `必须严格按照下列功能一览来填写指令，否则会审核不通过`⚠
+- 提交审核后请开启审核模式，并在您的沙箱测试群中进行自测，否则会不过审!
 
 
 ## 附件（!!!下载后红字部分需修改!!!）
