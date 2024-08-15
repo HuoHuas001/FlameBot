@@ -7,7 +7,6 @@ from botpy import logging, BotAPI
 from botpy.ext.command_util import Commands
 from botpy.message import GroupMessage
 from botpy.ext.cog_yaml import read
-from config import *
 _log = logging.get_logger()
 
 
@@ -108,8 +107,12 @@ class MyClient(botpy.Client):
                 return
 
 #订阅事件
-intents = botpy.Intents.none()
-intents.public_messages=True
+def main(APPID,SECRET):
+    intents = botpy.Intents.none()
+    intents.public_messages=True
 
-client = MyClient(intents=intents)
-client.run(appid=APPID, secret=SECRET)
+    client = MyClient(intents=intents)
+    client.run(appid=APPID, secret=SECRET)
+
+if __name__ == '__main__':
+    print("请使用index.py启动")

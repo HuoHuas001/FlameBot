@@ -2,7 +2,7 @@ import json
 import websockets
 from botpy import errors
 import uuid
-from basic import *
+from libs.basic import *
 
 # 定义WebSocket服务器类
 class WebSocketServer:
